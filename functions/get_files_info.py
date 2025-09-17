@@ -11,9 +11,25 @@ def get_files_info(working_directory, directory="."):
     if not os.path.isdir(target_path):
         return f'\tError: "{directory}" is not a directory'
 
+    try:
+        items = os.listdir(target_path)
+    except PermissionError:
+        return f'\tError: Permission denied accessing directory "{directory}"'
+    except FileNotFoundError:
+        return f'\tError: Directory "{directory}" not found'
+    except OSError as e:
+        return f'\tError: Cannot access directory "{directory}": {e}'
+
     output_string = ""
-    for item in os.listdir(target_path):
+    for item in items:
         abs_item_path = os.path.abspath(os.path.join(target_path, item))
-        output_string += f" - {item}: file_size={os.path.getsize(abs_item_path)}, is_dir={os.path.isdir(abs_item_path)}\n"
+        try:
+            file_size = os.path.getsize(abs_item_path)
+            is_directory = os.path.isdir(abs_item_path)
+            output_string += (
+                f" - {item}: file_size={file_size}, is_dir={is_directory}\n"
+            )
+        except (FileNotFoundError, PermissionError, OSError) as e:
+            return f"\tError: {e}"
 
     return output_string

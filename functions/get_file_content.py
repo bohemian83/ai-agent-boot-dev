@@ -12,7 +12,12 @@ def get_file_content(working_directory, file_path):
     if not os.path.isfile(target_path):
         return f'\tError: File not found or is not a regular file: "{file_path}"'
 
-    with open(target_path, "r") as f:
-        file_content_string = f.read(MAX_CHARS)
+    try:
+        with open(target_path, "r") as f:
+            file_content_string = f.read(MAX_CHARS)
+    except IOError as e:
+        return f"\tError: Read failed: {e}"
+    except Exception as e:
+        return f"\tError: {e}"
 
     return file_content_string

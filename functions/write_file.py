@@ -6,7 +6,7 @@ def write_file(working_directory, file_path, content):
     working_path = os.path.abspath(working_directory)
 
     if not target_path.startswith(working_path):
-        return f'Error: Cannot write to "{file_path}" as it is outside the permitted working directory'
+        return f'\tError: Cannot write to "{file_path}" as it is outside the permitted working directory'
 
     try:
         with open(target_path, "w") as f:
@@ -15,6 +15,6 @@ def write_file(working_directory, file_path, content):
             f'Successfully wrote to "{file_path}" ({len(content)} characters written)'
         )
     except IOError as e:
-        print(f"Error: Write failed: {e}")
+        return f"\tError: Write failed: {e}"
     except Exception as e:
-        print(f"Error: {e}")
+        return f"'\tError: {e}"
