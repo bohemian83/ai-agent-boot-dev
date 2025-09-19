@@ -3,78 +3,88 @@ import sys
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
-from functions.get_files_info import schema_get_files_info
-from functions.get_file_content import schema_get_file_content
-from functions.write_file import schema_write_file
-from functions.run_python_file import schema_run_python_file
-from functions.call_function import call_function
-
-if len(sys.argv) < 2:
-    print("Usage: uv run main.py <prompt> [--verbose]")
-    sys.exit(1)
+from functions.call_function import call_function, available_functions
+from prompt import system_prompt
+from config import LOOP_NUM
 
 
 def main():
-    system_prompt = """
-    You are a helpful AI coding agent.
+    # read in arguments
+    verbose = "--verbose" in sys.argv
+    args = []
+    for arg in sys.argv[1:]:
+        if not arg.startswith("--"):
+            args.append(arg)
 
-    When a user asks a question or makes a request, make a function call plan. You can perform the following operations:
+    if not args:
+        print("AI Code Assistant")
+        print('\nUsage: python main.py "your prompt here" [--verbose]')
+        print('Example: python main.py "How do I build a calculator app?"')
+        sys.exit(1)
 
-    - List files and directories
-    - Get file contents
-    - Write contents to file
-    - Run python files
-    
-    All paths you provide should be relative to the working directory. You do not need to specify the working directory in your function calls as it is automatically injected for security reasons.
-    """
-
-    user_prompt = sys.argv[1]
-    verbose_flag = None
-    if len(sys.argv) > 2:
-        verbose_flag = sys.argv[2]
-
-    # get api
+    # load env variables and get api key
     load_dotenv()
     api_key = os.environ.get("GEMINI_API_KEY")
 
-    # initialise client
+    # initialise client and user prompt
     client = genai.Client(api_key=api_key)
-
-    # add available functions
-    available_functions = types.Tool(
-        function_declarations=[
-            schema_get_files_info,
-            schema_get_file_content,
-            schema_write_file,
-            schema_run_python_file,
-        ]
-    )
-
+    user_prompt = " ".join(args)
     messages = [types.Content(role="user", parts=[types.Part(text=user_prompt)])]
 
     # query and get response
-    response = client.models.generate_content(
-        model="gemini-2.0-flash-001",
-        contents=messages,
-        config=types.GenerateContentConfig(
-            tools=[available_functions], system_instruction=system_prompt
-        ),
-    )
+    loop_index = 0
+    while loop_index < 7:
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.0-flash-001",
+                contents=messages,
+                config=types.GenerateContentConfig(
+                    tools=[available_functions], system_instruction=system_prompt
+                ),
+            )
 
-    # # print response
-    # print(f"Model response: {response.text}")
+            for candidate in response.candidates:
+                messages.append(candidate.content)
 
-    # print function calls if they happened
-    if response.function_calls:
-        call_result = call_function(response.function_calls[0], verbose=True)
-        if call_result is None:
-            raise Exception("No result from function call")
-        print(f"-> {call_result.parts[0].function_response.response}")
+            if verbose:
+                print(f"User prompt: {user_prompt}")
+                print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
+                print(
+                    f"Response tokens: {response.usage_metadata.candidates_token_count}"
+                )
 
-    if verbose_flag == "--verbose":
-        print(f"User prompt: {user_prompt}")
-        print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
-        print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
+            if response.function_calls:
+                for function_call_part in response.function_calls:
+                    function_call_result = call_function(
+                        function_call_part, verbose=True
+                    )
+                    if (
+                        not function_call_result.parts
+                        or not function_call_result.parts[0].function_response
+                    ):
+                        raise Exception("No result from function call")
+                    if verbose:
+                        print(
+                            f"-> {function_call_result.parts[0].function_response.response}"
+                        )
+
+                    messages.append(
+                        types.Content(
+                            role="user",
+                            parts=[function_call_result.parts[0]],
+                        )
+                    )
+                loop_index += 1
+                continue
+
+            if response.text:
+                print(f"Final response: {response.text}")
+                break
+
+        except Exception as e:
+            print(f"Error: {e}")
+
+        loop_index += 1
 
 
 if __name__ == "__main__":

@@ -44,7 +44,7 @@ def get_files_info(working_directory, directory="."):
             output_string += (
                 f" - {item}: file_size={file_size}, is_dir={is_directory}\n"
             )
-        except (FileNotFoundError, PermissionError, OSError) as e:
-            return f"\tError: {e}"
+        except Exception as e:
+            return f"\tError listing files: {e}"
 
     return output_string
